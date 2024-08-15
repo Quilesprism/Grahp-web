@@ -56,75 +56,46 @@ def move(request, index):
             trayectoria=','.join(map(str, estado_list))
         )
         nuevo_movimiento.save()
+
     
-    return redirect('index')
+    context = grafo_movimientos(request)
+
+    return render(request, 'game/index.html', context)
 
 def grafo_movimientos(request):
-    movimientos = Movimiento.objects.all()
+    movimientos = Movimiento.objects.all().values('movimiento', 'trayectoria')
+    print(movimientos)
 
-    grafo = defaultdict(int)
+    datos = {'nodes': [], 'links': []}
+    seen_nodes = {}
 
-    for mov in movimientos:
-        trayecto = mov.trayectoria.split(',')
-        for i in range(len(trayecto) - 1):
-            origen = trayecto[i]
-            destino = trayecto[i + 1]
-            grafo[(origen, destino)] += 1
+    for item in movimientos:
+        print(f"items del movimientos: {item}")
+        tray = item['trayectoria']
+        mov = item['movimiento']
+        node_id = f"{tray}_{mov}"
+        if node_id not in seen_nodes:
+            datos['nodes'].append({'id': node_id, 'trayectoria': tray})
+            seen_nodes[node_id] = tray 
 
-    # Preparar los nodos y enlaces para Bokeh
-    G = nx.Graph()
-    for (origen, destino), peso in grafo.items():
-        G.add_edge(origen, destino, weight=peso)
+        movimiento_anterior = mov - 1
+        if movimiento_anterior > 0:
+            tray_anterior = next((m['trayectoria'] for m in movimientos if m['movimiento'] == movimiento_anterior), None)
+            if tray_anterior:
+                node_id_anterior = f"{tray_anterior}_{movimiento_anterior}"
+                if node_id_anterior in seen_nodes:
+                    datos['links'].append({'source': node_id_anterior, 'target': node_id})
 
-    plot = figure(title="Grafo de Movimientos", x_range=(-1.1, 1.1), y_range=(-1.1, 1.1),
-                  tools="", toolbar_location=None)
+        if not any(m['movimiento'] == mov + 1 for m in movimientos):
+            datos['links'].append({'source': node_id, 'target': node_id})
 
-    graph_renderer = from_networkx(G, nx.spring_layout, scale=2, center=(0, 0))
+    print(datos)
 
-    plot.renderers.append(graph_renderer)
-
-    script, div = components(plot)
     
-    return render(request, 'game/index.html', {'script': script, 'div': div})
+    # Convierte los datos a JSON
+    context = {
+        'datos': json.dumps(datos)
+    }
+    return render(request, 'game/index.html', context)
+    
 
-def generar_grafo(request):
-    # Obtener todos los movimientos desde la BD
-    movimientos = Movimiento.objects.all()
-    
-    # Contar la frecuencia de cada trayectoria
-    trayectorias = [mov.trayectoria for mov in movimientos]
-    frecuencia_trayectorias = Counter(trayectorias)
-    
-    # Crear un grafo dirigido
-    G = nx.DiGraph()
-
-    for mov in movimientos:
-        trayecto = mov.trayectoria.split(',')
-        for i in range(len(trayecto) - 1):
-            origen = trayecto[i]
-            destino = trayecto[i + 1]
-            if G.has_edge(origen, destino):
-                G[origen][destino]['weight'] += 1
-            else:
-                G.add_edge(origen, destino, weight=1)
-    
-    # Ajustar los tamaños de los nodos y aristas en función de la frecuencia
-    edge_widths = [G[u][v]['weight'] for u, v in G.edges()]
-    
-    plt.figure(figsize=(10, 8))
-    pos = nx.spring_layout(G)
-    nx.draw(G, pos, with_labels=True, node_size=700, node_color='skyblue', 
-            font_size=10, font_weight='bold', edge_color=edge_widths, 
-            edge_cmap=plt.cm.Blues, width=edge_widths)
-
-    # Guardar la imagen en un buffer
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    image_png = buffer.getvalue()
-    buffer.close()
-    
-    # Convertir la imagen a base64 para enviar al template
-    graph_image = base64.b64encode(image_png).decode('utf-8')
-    
-    return render(request, 'game/index.html', {'graph_image': graph_image})

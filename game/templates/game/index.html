@@ -27,10 +27,32 @@
             width: 600px;
             height: 600px;
         }
+        .node {
+    stroke: #000;
+    stroke-width: 1.5px;
+    fill: #1f77b4;
+}
+
+.link {
+    stroke: #999;
+    stroke-opacity: 0.6;
+}
+
+.link:hover {
+    stroke: #ff0000;
+    stroke-width: 2px;
+}
+
+.node:hover {
+    stroke: #ff0000;
+    stroke-width: 2px;
+    fill: #ffcc00;
+}
     </style>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <link href="https://cdn.bokeh.org/bokeh/release/bokeh-3.5.1.min.css" rel="stylesheet" type="text/css">
     <script src="https://cdn.bokeh.org/bokeh/release/bokeh-3.5.1.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
     <h1>Puzzle Game</h1>
@@ -46,9 +68,106 @@
     </div>
     <p>Moves: {{ moves }}</p>
     
-    <div>
-        {{ div|safe }}
-    </div>
-        {{ script|safe }}
+    <h1>Visualización del Grafo de Movimientos</h1>
+
+    <h1>Grafo de Trayectorias</h1>
+    <svg width="960" height="600"></svg>
+    <script>
+       const data = {{ datos|safe }};
+console.log(data);
+const width = 960;
+const height = 960;
+
+const svg = d3.select("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+// Define el margen para los nodos
+const margin = 20;
+
+// Configura la simulación de la fuerza
+const simulation = d3.forceSimulation(data.nodes)
+    .force("link", d3.forceLink()
+        .id(d => d.id)
+        .distance(30) // Ajusta la distancia entre los nodos
+    )
+    .force("charge", d3.forceManyBody()
+        .strength(-30) // Ajusta la repulsión entre nodos
+    )
+    .force("center", d3.forceCenter(width / 2, height / 2)) // Centra los nodos en el SVG
+    .force("x", d3.forceX(width / 2).strength(0.1)) // Fuerza adicional para centrar horizontalmente
+    .force("y", d3.forceY(height / 2).strength(0.1)); // Fuerza adicional para centrar verticalmente
+
+const link = svg.append("g")
+    .attr("class", "links")
+  .selectAll("line")
+  .data(data.links)
+  .enter().append("line")
+    .attr("class", "link")
+    .attr("stroke", "#999") // Color de la línea
+    .attr("stroke-opacity", 0.6) // Opacidad de la línea
+    .attr("stroke-width", 1.5); // Ancho de la línea
+
+const node = svg.append("g")
+    .attr("class", "nodes")
+  .selectAll("circle")
+  .data(data.nodes)
+  .enter().append("circle")
+    .attr("class", "node")
+    .attr("r", 8)
+    .attr("fill", "#1f77b4") // Color de los nodos
+    .call(d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended));
+
+node.append("title")
+    .text(d => d.id);
+
+simulation
+    .nodes(data.nodes)
+    .on("tick", ticked);
+
+simulation.force("link")
+    .links(data.links);
+
+function ticked() {
+    link
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+    node
+        .attr("cx", d => {
+            // Constrain x to be within the SVG width, with a margin
+            d.x = Math.max(0 + margin, Math.min(width - margin, d.x));
+            return d.x;
+        })
+        .attr("cy", d => {
+            // Constrain y to be within the SVG height, with a margin
+            d.y = Math.max(0 + margin, Math.min(height - margin, d.y));
+            return d.y;
+        });
+}
+
+function dragstarted(event, d) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+}
+
+function dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+}
+
+function dragended(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+}
+    </script>
+    
 </body>
 </html>
