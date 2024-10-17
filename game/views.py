@@ -91,8 +91,6 @@ def grafo_movimientos(request):
 
     print(datos)
 
-    
-    # Convierte los datos a JSON
     context = {
         'datos': json.dumps(datos)
     }
